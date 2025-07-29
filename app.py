@@ -1,17 +1,15 @@
 from flask import Flask, request, jsonify
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
-import csv, time, os, requests
+import os, json, requests, time
 from bs4 import BeautifulSoup
 
 app = Flask(__name__)
 
-# Google API sozlamalari
-SERVICE_ACCOUNT_FILE = 'service-account.json'
+# Google API credentialsni Render Environment Variables dan yuklash
+credentials_info = json.loads(os.environ["GOOGLE_APPLICATION_CREDENTIALS_JSON"])
 SCOPES = ['https://www.googleapis.com/auth/indexing']
-credentials = service_account.Credentials.from_service_account_file(
-    SERVICE_ACCOUNT_FILE, scopes=SCOPES
-)
+credentials = service_account.Credentials.from_service_account_info(credentials_info, scopes=SCOPES)
 service = build('indexing', 'v3', credentials=credentials)
 
 def check_canonical(url):
