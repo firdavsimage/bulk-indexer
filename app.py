@@ -54,10 +54,12 @@ def home():
     return '''
     <h2>Google Bulk Indexer + Canonical Checker</h2>
     <form action="/bulk" method="post" enctype="multipart/form-data">
-        <input type="file" name="file" accept=".csv" required>
+        <input type="file" name="file" accept=".csv,.txt" required>
         <button type="submit">Indeksga yuborish</button>
     </form>
     '''
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=10000)
+    # Render free plan PORT environment variable ishlatadi
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
