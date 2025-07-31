@@ -2,6 +2,11 @@ services:
   - type: web
     name: bulk-indexer
     env: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: python app.py
     plan: free
+    buildCommand: pip install --no-cache-dir -r requirements.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.10
+      - key: GOOGLE_APPLICATION_CREDENTIALS_JSON
+        sync: false
