@@ -1,65 +1,63 @@
-from flask import Flask, request, jsonify
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
-import os, json, requests, time
+from flask import Flask, request, render_template, jsonify
+import requests
 from bs4 import BeautifulSoup
+import os
 
 app = Flask(__name__)
 
-# Google API credentialsni Render Environment Variables dan yuklash
-credentials_info = json.loads(os.environ["GOOGLE_APPLICATION_CREDENTIALS_JSON"])
-SCOPES = ['https://www.googleapis.com/auth/indexing']
-credentials = service_account.Credentials.from_service_account_info(credentials_info, scopes=SCOPES)
-service = build('indexing', 'v3', credentials=credentials)
+# 🔹 Google Search Console API uchun sozlamalar
+# TOKEN olish uchun GSC API OAuth2 kerak bo‘ladi (keyinroq sozlash mumkin)
+GSC_API_URL = "https://indexing.googleapis.com/v3/urlNotifications:publish"
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")  
 
-def check_canonical(url):
-    """ Sahifadan canonical linkni topish """
-    try:
-        resp = requests.get(url, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
-        soup = BeautifulSoup(resp.text, 'html.parser')
-        canonical_tag = soup.find("link", rel="canonical")
-        if canonical_tag and canonical_tag.get("href"):
-            return canonical_tag["href"]
-        return None
-    except:
-        return None
+@app.route("/")
+def index():
+    return render_template("index.html")
 
-def index_url(url):
-    canonical_found = check_canonical(url)
-    if canonical_found and canonical_found.strip() != url.strip():
-        note = f"⚠ Google chalkashishi mumkin. Canonical topildi: {canonical_found}"
-    else:
-        note = "✅ Canonical to'g'ri yoki yo'q"
-
-    try:
-        publish_request = {'url': url, 'type': 'URL_UPDATED'}
-        service.urlNotifications().publish(body=publish_request).execute()
-        return {"url": url, "status": "Indexed", "note": note}
-    except Exception as e:
-        return {"url": url, "status": "Error", "error": str(e), "note": note}
-
-@app.route('/bulk', methods=['POST'])
-def bulk_index():
-    file = request.files['file']
-    urls = file.read().decode('utf-8').splitlines()
+@app.route("/canonical-check", methods=["POST"])
+def canonical_check():
+    urls = request.form.get("urls", "").splitlines()
     results = []
     for url in urls:
-        if url.strip():
-            results.append(index_url(url.strip()))
-            time.sleep(2)  # API limitdan oshmaslik uchun
+        try:
+            r = requests.get(url.strip(), timeout=10)
+            soup = BeautifulSoup(r.text, "html.parser")
+            canonical = soup.find("link", rel="canonical")
+            canonical_url = canonical["href"] if canonical else "Yo‘q"
+            results.append({
+                "url": url,
+                "canonical": canonical_url,
+                "status": "✅ Mos" if canonical_url == url.strip() else "❌ Mos emas"
+            })
+        except Exception as e:
+            results.append({"url": url, "canonical": "Xato", "status": str(e)})
     return jsonify(results)
 
-@app.route('/')
-def home():
-    return '''
-    <h2>Google Bulk Indexer + Canonical Checker</h2>
-    <form action="/bulk" method="post" enctype="multipart/form-data">
-        <input type="file" name="file" accept=".csv,.txt" required>
-        <button type="submit">Indeksga yuborish</button>
-    </form>
-    '''
+@app.route("/bulk-index", methods=["POST"])
+def bulk_index():
+    urls = request.form.get("urls", "").splitlines()
+    results = []
+    for url in urls:
+        try:
+            payload = {
+                "url": url.strip(),
+                "type": "URL_UPDATED"
+            }
+            headers = {"Content-Type": "application/json"}
+            if GOOGLE_API_KEY:
+                r = requests.post(GSC_API_URL,
+                                  params={"key": GOOGLE_API_KEY},
+                                  json=payload,
+                                  headers=headers)
+                if r.status_code == 200:
+                    results.append({"url": url, "status": "✅ Indekslash so‘rovi yuborildi"})
+                else:
+                    results.append({"url": url, "status": f"❌ Xato: {r.text}"})
+            else:
+                results.append({"url": url, "status": "❌ GOOGLE_API_KEY topilmadi"})
+        except Exception as e:
+            results.append({"url": url, "status": f"❌ Xato: {e}"})
+    return jsonify(results)
 
-if __name__ == '__main__':
-    # Render free plan PORT environment variable ishlatadi
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host='0.0.0.0', port=port)
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
