@@ -3,15 +3,15 @@ from googleapiclient.discovery import build
 from google.oauth2 import service_account
 from canonical_checker import check_canonical
 import os
+import json
 
 app = Flask(__name__)
 
-# Google API sozlamalari
-SERVICE_ACCOUNT_FILE = os.getenv("GOOGLE_SERVICE_ACCOUNT", "service_account.json")
+# Google API sozlamalari (Environment Variable orqali)
 SCOPES = ["https://www.googleapis.com/auth/indexing"]
-
-credentials = service_account.Credentials.from_service_account_file(
-    SERVICE_ACCOUNT_FILE, scopes=SCOPES
+service_account_info = json.loads(os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON", "{}"))
+credentials = service_account.Credentials.from_service_account_info(
+    service_account_info, scopes=SCOPES
 )
 service = build("indexing", "v3", credentials=credentials)
 
