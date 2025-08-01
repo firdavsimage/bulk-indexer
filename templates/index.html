@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="UTF-8">
+    <title>Bulk Indexer + Canonical Checker</title>
+</head>
+<body>
+    <h1>Google Bulk Indexer + Canonical Checker</h1>
+
+    <form id="canonicalForm" method="post">
+        <h3>Canonical Checker</h3>
+        <textarea name="urls" rows="6" cols="60" placeholder="URL larni kiriting"></textarea><br>
+        <button type="submit">Tekshirish</button>
+    </form>
+    <div id="canonicalResults"></div>
+
+    <hr>
+
+    <form id="indexerForm" method="post">
+        <h3>Google Bulk Indexer</h3>
+        <textarea name="urls" rows="6" cols="60" placeholder="URL larni kiriting"></textarea><br>
+        <button type="submit">Indekslash</button>
+    </form>
+    <div id="indexerResults"></div>
+
+    <script>
+    document.getElementById("canonicalForm").onsubmit = async function(e) {
+        e.preventDefault();
+        let formData = new FormData(this);
+        let res = await fetch("/canonical-check", {method:"POST", body: formData});
+        let data = await res.json();
+        document.getElementById("canonicalResults").innerHTML = 
+            data.map(r => `<p><b>${r.url}</b>: ${r.status} (${r.canonical})</p>`).join("");
+    }
+
+    document.getElementById("indexerForm").onsubmit = async function(e) {
+        e.preventDefault();
+        let formData = new FormData(this);
+        let res = await fetch("/bulk-index", {method:"POST", body: formData});
+        let data = await res.json();
+        document.getElementById("indexerResults").innerHTML = 
+            data.map(r => `<p><b>${r.url}</b>: ${r.status}</p>`).join("");
+    }
+    </script>
+</body>
+</html>
