@@ -1,11 +1,18 @@
-FROM python:3.10-slim
+# Python image
+FROM python:3.11-slim
 
+# Ishchi papka
 WORKDIR /app
 
+# Talablarni o‘rnatish
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Loyiha fayllarini ko‘chirish
 COPY . .
 
+# Flask port
 EXPOSE 5000
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "app:app"]
+
+# Ishga tushirish
+CMD ["python", "app.py"]
