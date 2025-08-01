@@ -1,14 +1,31 @@
 from flask import Flask, request, render_template, jsonify
 import requests
 from bs4 import BeautifulSoup
-import os
+import os, json
+from google.auth.transport.requests import Request
+from google.oauth2 import service_account
 
 app = Flask(__name__)
 
-# 🔹 Google Search Console API uchun sozlamalar
-# TOKEN olish uchun GSC API OAuth2 kerak bo‘ladi (keyinroq sozlash mumkin)
+# 🔹 Google Indexing API URL
 GSC_API_URL = "https://indexing.googleapis.com/v3/urlNotifications:publish"
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")  
+
+# 🔹 Service Account JSON ni environmentdan olish
+service_account_info = json.loads(os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON", "{}"))
+
+credentials = None
+if service_account_info:
+    credentials = service_account.Credentials.from_service_account_info(
+        service_account_info,
+        scopes=["https://www.googleapis.com/auth/indexing"]
+    )
+
+def get_access_token():
+    """Access token olish"""
+    global credentials
+    if credentials and credentials.expired:
+        credentials.refresh(Request())
+    return credentials.token if credentials else None
 
 @app.route("/")
 def index():
@@ -37,24 +54,27 @@ def canonical_check():
 def bulk_index():
     urls = request.form.get("urls", "").splitlines()
     results = []
+
+    token = get_access_token()
+    if not token:
+        return jsonify({"error": "❌ Access token olinmadi. JSON sozlamasini tekshiring."}), 400
+
     for url in urls:
         try:
             payload = {
                 "url": url.strip(),
                 "type": "URL_UPDATED"
             }
-            headers = {"Content-Type": "application/json"}
-            if GOOGLE_API_KEY:
-                r = requests.post(GSC_API_URL,
-                                  params={"key": GOOGLE_API_KEY},
-                                  json=payload,
-                                  headers=headers)
-                if r.status_code == 200:
-                    results.append({"url": url, "status": "✅ Indekslash so‘rovi yuborildi"})
-                else:
-                    results.append({"url": url, "status": f"❌ Xato: {r.text}"})
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {token}"
+            }
+            r = requests.post(GSC_API_URL, json=payload, headers=headers)
+
+            if r.status_code == 200:
+                results.append({"url": url, "status": "✅ Indekslash so‘rovi yuborildi"})
             else:
-                results.append({"url": url, "status": "❌ GOOGLE_API_KEY topilmadi"})
+                results.append({"url": url, "status": f"❌ Xato: {r.text}"})
         except Exception as e:
             results.append({"url": url, "status": f"❌ Xato: {e}"})
     return jsonify(results)
