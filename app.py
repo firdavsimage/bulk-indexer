@@ -1,68 +1,28 @@
-from flask import Flask, request, jsonify, render_template
-from googleapiclient.discovery import build
-from google.oauth2 import service_account
-from canonical_checker import check_canonical
-import os, json, csv
+import requests
+import json
+import time
 
-app = Flask(__name__)
+API_URL = "https://bulk-indexer-6ezm.onrender.com/index"
 
-# Google API sozlamalari (Environment Variable orqali)
-SCOPES = ["https://www.googleapis.com/auth/indexing"]
-service_account_info = json.loads(os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON", "{}"))
-credentials = service_account.Credentials.from_service_account_info(
-    service_account_info, scopes=SCOPES
-)
-service = build("indexing", "v3", credentials=credentials)
+def submit_urls():
+    with open("urls.txt", "r", encoding="utf-8") as f:
+        urls = [line.strip() for line in f if line.strip()]
 
-def publish_url(url):
-    body = {
-        "url": url,
-        "type": "URL_UPDATED"
-    }
-    service.urlNotifications().publish(body=body).execute()
+    # 100 tadan ko'p bo'lsa bo'lib yuboramiz
+    batch_size = 100
+    for i in range(0, len(urls), batch_size):
+        batch = urls[i:i+batch_size]
+        payload = {"urls": batch}
+        headers = {"Content-Type": "application/json"}
 
-def read_urls_from_file(file_storage):
-    """TXT yoki CSV dan URL ro'yxatini o'qish"""
-    urls = []
-    content = file_storage.read().decode("utf-8").strip()
-    if file_storage.filename.endswith(".csv"):
-        reader = csv.reader(content.splitlines())
-        for row in reader:
-            if row:
-                urls.append(row[0].strip())
-    else:  # txt
-        for line in content.splitlines():
-            if line.strip():
-                urls.append(line.strip())
-    return urls
-
-@app.route("/")
-def index():
-    return render_template("index.html")
-
-@app.route("/bulk_index_file", methods=["POST"])
-def bulk_index_file():
-    if "file" not in request.files:
-        return jsonify({"error": "Fayl topilmadi"}), 400
-    file = request.files["file"]
-    urls = read_urls_from_file(file)
-    results = []
-    for url in urls:
         try:
-            publish_url(url)
-            results.append({"url": url, "status": "Indexed"})
+            response = requests.post(API_URL, data=json.dumps(payload), headers=headers)
+            print("Yuborildi:", batch)
+            print("Javob:", response.text)
         except Exception as e:
-            results.append({"url": url, "error": str(e)})
-    return jsonify(results)
+            print("Xato:", e)
 
-@app.route("/canonical_check_file", methods=["POST"])
-def canonical_check_file():
-    if "file" not in request.files:
-        return jsonify({"error": "Fayl topilmadi"}), 400
-    file = request.files["file"]
-    urls = read_urls_from_file(file)
-    results = [check_canonical(url) for url in urls]
-    return jsonify(results)
+        time.sleep(2)  # Google limitidan oshmaslik uchun
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    submit_urls()
