@@ -8,7 +8,7 @@ import os
 
 app = Flask(__name__)
 
-API_URL = "https://bulk-indexer-bew8.onrender.com/index"
+API_URL = "https://bulk-indexer-xg1p.onrender.com/index"
 LOG_FILE = "indexed.log"
 ERR_FILE = "errors.log"
 KEEP_DAYS = 7  # loglarda faqat oxirgi 7 kunni saqlash
