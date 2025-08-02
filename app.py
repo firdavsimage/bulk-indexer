@@ -1,8 +1,12 @@
+from flask import Flask
+import threading
 import requests
 import json
 import time
 from datetime import datetime, timedelta
 import os
+
+app = Flask(__name__)
 
 API_URL = "https://bulk-indexer-6ezm.onrender.com/index"
 LOG_FILE = "indexed.log"
@@ -10,7 +14,6 @@ ERR_FILE = "errors.log"
 KEEP_DAYS = 7  # loglarda faqat oxirgi 7 kunni saqlash
 
 def clean_old_logs(file_path):
-    """Log fayldan faqat oxirgi 7 kunlik yozuvlarni qoldirish"""
     if not os.path.exists(file_path):
         return
     lines_to_keep = []
@@ -22,13 +25,12 @@ def clean_old_logs(file_path):
                 timestamp = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S.%f")
                 if timestamp >= cutoff_date:
                     lines_to_keep.append(line)
-            except Exception:
+            except:
                 continue
     with open(file_path, "w", encoding="utf-8") as f:
         f.writelines(lines_to_keep)
 
 def get_already_indexed():
-    """indexed.log ichidan allaqachon yuborilgan URL'larni olish"""
     if not os.path.exists(LOG_FILE):
         return set()
     urls = set()
@@ -52,6 +54,9 @@ def log_error(urls, error_msg):
             f.write(f"{datetime.now()} - Error: {url} - {error_msg}\n")
 
 def submit_urls():
+    if not os.path.exists("urls.txt"):
+        return "urls.txt topilmadi."
+
     with open("urls.txt", "r", encoding="utf-8") as f:
         all_urls = [line.strip() for line in f if line.strip()]
 
@@ -59,8 +64,7 @@ def submit_urls():
     new_urls = [url for url in all_urls if url not in already_indexed]
 
     if not new_urls:
-        print("⚡ Yangi URL yo'q, yuborilmaydi.")
-        return
+        return "⚡ Yangi URL yo‘q."
 
     batch_size = 100
     for i in range(0, len(new_urls), batch_size):
@@ -71,16 +75,24 @@ def submit_urls():
         try:
             response = requests.post(API_URL, data=json.dumps(payload), headers=headers)
             if response.status_code == 200:
-                print("✅ Yuborildi:", batch)
                 log_success(batch)
             else:
-                print("❌ Xato:", response.text)
                 log_error(batch, response.text)
         except Exception as e:
-            print("❌ Ulanishda xato:", e)
             log_error(batch, str(e))
 
-        time.sleep(2)  # quota limitiga tushib qolmaslik uchun
+        time.sleep(2)
+
+    return f"✅ {len(new_urls)} ta yangi URL yuborildi."
+
+@app.route("/")
+def home():
+    return "Bulk Indexer cron server ishlayapti."
+
+@app.route("/run")
+def run_now():
+    threading.Thread(target=submit_urls).start()
+    return "Indexlash jarayoni ishga tushirildi."
 
 if __name__ == "__main__":
-    submit_urls()
+    app.run(host="0.0.0.0", port=5000)
